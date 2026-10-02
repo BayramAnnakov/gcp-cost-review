@@ -1,0 +1,29 @@
+{
+  "skill_name": "gcp-cost-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "our google cloud bill jumped about 30% last month and i genuinely don't know why. we have the billing export in bigquery. can you work out what changed and whether it's something we did?",
+      "expected_output": "Establishes the settle gate before quoting numbers; finds the step date rather than splitting the delta; separates attributable from demand/other-team changes; keeps MEASURED vs INFERRED apart.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "run the monthly cloud cost review for september",
+      "expected_output": "Follows Mode A: settle gate, invoice reconciliation, run rate on gross, step detection, new-or-resumed SKU check, regression sweep, one priced opportunity, and a 'not checked' section.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "i found network intelligence center costing us like $60/mo in the billing console. worth turning off? what breaks?",
+      "expected_output": "Checks the credits array BEFORE pricing, discovers the 100% proportional discount, and reports that the net saving is $0.00 rather than recommending the change.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "we want to scale our staging kubernetes namespaces to zero outside working hours to save money. can you set that up?",
+      "expected_output": "Prices the realisable (idle-fraction) saving rather than gross, insists the automated reaper be EXECUTED not reviewed, and flags the silent-hang failure mode plus the need for a lease and docs at the point of confusion.",
+      "files": []
+    }
+  ]
+}
