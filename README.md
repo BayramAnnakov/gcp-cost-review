@@ -29,7 +29,7 @@ discover.
 ## Install
 
 ```bash
-git clone https://github.com/bayramannakov/gcp-cost-review.git
+git clone https://github.com/BayramAnnakov/gcp-cost-review.git
 ln -s "$PWD/gcp-cost-review" ~/.claude/skills/gcp-cost-review
 pip install google-cloud-bigquery
 gcloud auth application-default login
