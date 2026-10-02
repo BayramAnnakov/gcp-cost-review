@@ -53,6 +53,34 @@ Both modes require Step 0 first.
 
 Do this once per account, then record the answers so later sessions skip it.
 
+**0.0 Check you have the access, before anything else.** Three different capabilities are
+involved and they usually sit with **three different people** — knowing that on day one is
+worth more than any query here.
+
+| to… | you need | on |
+|---|---|---|
+| **read the bill** (console reports, invoices) | `roles/billing.viewer` — or `roles/billing.costsManager` | the **billing account** |
+| **query the export** | `roles/bigquery.dataViewer` on the export dataset **and** `roles/bigquery.jobUser` on whichever project runs the queries (often a different project) | BigQuery |
+| **sweep resources** for the structural audit | `roles/viewer`, plus `roles/recommender.viewer` for the Recommender API | each project |
+| **enable the export**, if it does not exist | `roles/billing.admin` | the billing account |
+| **act on a finding** | admin/editor for that specific service | the owning project |
+
+**Everything this skill does to analyse is read-only**, and the first three rows are a modest,
+easy-to-justify ask — you can usually get them same-day. The last two are the ones that
+stall: `billing.admin` is often held by finance or a founder, and acting needs whoever owns
+the service. If you can only get read access, you can still do the entire measurement and
+hand someone else a priced, evidenced list — say so when you ask, because "I need read-only
+on billing" gets approved far faster than "I need access to GCP".
+
+If you are missing something, find out now rather than three steps in. A denied API call
+late in an engagement looks like a technical problem and is actually a scheduling one.
+
+> **No billing export?** That is the most common starting state — the method does not
+> stop there. Read `references/no-export-yet.md`: how to enable it (and the one dropdown
+> that decides whether you get a month of backfill), what you can do *today* without it
+> via the console, the Recommender API and a resource-level sweep, and — importantly —
+> which conclusions you must not claim until the export exists.
+
 **0.1 Find the billing export.** Cost data lives in a BigQuery table the user must
 already have enabled; there is no API that reconstructs it. Run
 `scripts/discover.py` - it lists candidate datasets and tables and prints the table id,
@@ -186,6 +214,24 @@ safer and they cost nothing to sequence first.
 Write the expected number **before** you look: "SKU X falls from A/day to B/day; control
 stays at C." A prediction made after seeing the data is not a test.
 
+**First check your instrument can see it.** This is cheap, it takes one query, and skipping
+it is how people spend a week proving nothing.
+
+Pull the SKU's daily series over a stable period and look at its day-to-day spread. If the
+saving you expect is smaller than the normal daily variation, **the billing data cannot
+confirm it** — not with more patience, not with a longer window, because you are reading a
+signal below the noise. A SKU that swings ±$3/day will never testify to a $2/day saving.
+
+When that happens you have three honest options, and "wait and see" is not among them:
+- **change instrument** — measure the *usage units* (requests, GiB, samples, node-hours),
+  which are usually far less noisy than the dollars derived from them
+- **measure structure instead of spend** — "the resource exists / does not exist", "the node
+  count went 4 → 3". A binary has no noise floor.
+- **say it is unverifiable** and take the change on reasoning, labelled as such
+
+Decide which one *before* you ship, and write it next to the prediction. Finding out
+afterwards that the measurement could never have shown the win is the expensive way round.
+
 Then verify only on days the settle gate passes, and look for the signature that
 distinguishes a real change from missing data:
 
@@ -248,6 +294,7 @@ refuses a query with any placeholder left unsubstituted, and dry-runs for cost f
 - `references/traps.md` - the catalogue of expensive mistakes, each with its tell
 - `references/where-the-money-hides.md` - where GCP money actually accumulates, by service
 - `references/monthly-review.md` - Mode A: the recurring loop and its report template
+- `references/no-export-yet.md` - no export, or a brand-new one: enable it, and what to do meanwhile
 - `scripts/discover.py` - locate the billing export and summarise its shape
 - `scripts/bq.py` - run a query file against the export and print a readable table
 - `assets/queries/` - the canonical queries, parameterised

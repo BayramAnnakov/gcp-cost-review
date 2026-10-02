@@ -22,6 +22,7 @@ discover.
 | `references/traps.md` | the catalogue of expensive mistakes, each with its tell |
 | `references/where-the-money-hides.md` | where GCP spend actually accumulates, by service |
 | `references/monthly-review.md` | the recurring review loop and its report template |
+| `references/no-export-yet.md` | **no export yet?** enable it, and what you can measure meanwhile |
 | `scripts/discover.py` | find the billing export and describe its shape |
 | `scripts/bq.py` | run a parameterised query and print a readable table |
 | `assets/queries/` | the canonical SQL, account-agnostic |
@@ -35,11 +36,22 @@ pip install google-cloud-bigquery
 gcloud auth application-default login
 ```
 
-**You also need BigQuery access, which the login above does not grant.** On the project
-that holds the billing export you need to read the data (`roles/bigquery.dataViewer`, or
-`bigquery.tables.getData` + `tables.get`), and on whichever project runs the queries you
-need `bigquery.jobs.create` (`roles/bigquery.jobUser`). They are often different projects.
-Check with:
+### What access you need
+
+The `gcloud` login above grants **none** of this. All of it is read-only:
+
+| to… | role | on |
+|---|---|---|
+| read the bill / invoices | `roles/billing.viewer` | the billing account |
+| query the export | `roles/bigquery.dataViewer` (export dataset) **+** `roles/bigquery.jobUser` (the project running queries — often a different one) | BigQuery |
+| sweep resources | `roles/viewer` **+** `roles/recommender.viewer` | each project |
+| *enable* the export, if absent | `roles/billing.admin` | the billing account |
+
+Those first three are a modest ask and usually land same-day. `billing.admin` is the one that
+stalls — it typically sits with finance or a founder, so if the export does not exist yet, ask
+for it on day one and work through `references/no-export-yet.md` meanwhile.
+
+Check what you actually have with:
 
 ```bash
 python scripts/discover.py                    # tries your ADC quota + default projects
@@ -92,9 +104,11 @@ zero, while zero dollars across zero rows is missing data wearing the same costu
 
 ## What this skill does not do
 
-- It does not enable the billing export, and the export does not backfill. If it was
-  turned on last week, "why did last quarter change" may be unanswerable — the skill will
-  tell you that rather than substituting a worse instrument.
+- It does not enable the billing export for you, and the export only collects forward (bar
+  one previous-month backfill if you pick a US/EU multi-region dataset). If it was turned on
+  last week, "why did last quarter change" may be unanswerable — the skill says so rather
+  than substituting a worse instrument. **If you have no export at all, start at
+  `references/no-export-yet.md`** — there is a real degraded path.
 - It does not make changes to your infrastructure. It reads, prices, and tells you what
   to verify.
 - It is GCP-specific. The method generalises; the SQL does not.
