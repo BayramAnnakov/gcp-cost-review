@@ -9,9 +9,11 @@ You do not have to stop. Do two things in this order.
 
 ## 1. Turn the export on now — before you do anything else
 
-It only collects **forward**. Every day you wait is a day you can never analyse. Even if you
-use the whole workaround below and never run a query this month, enabling it today is what
-makes next month answerable.
+It collects **forward**, with one exception worth planning around: a first export into a US or
+EU multi-region dataset backfills from the start of the *previous* month. Beyond that, history
+you did not export is gone — and re-enabling it or switching destination later does not
+recreate it. So enabling it today is what makes next month answerable, and it costs nothing to
+do while you work through the rest of this file.
 
 **Billing → Billing export → BigQuery export → Standard usage cost.**
 
@@ -65,41 +67,59 @@ and exports CSV. That is most of what the month-over-month and run-rate steps ne
 Work in the CSV: it gives you a table you can sort, which is enough to find your biggest lines
 and your biggest movers.
 
-**What you lose, and you should say so out loud in any report you write:**
-- per-row **credit detail** — so you cannot tell a capped pot from a 100% discount, which is
-  the single most expensive confusion in this whole method (trap A2). Treat every "saving" as
-  unconfirmed until you can see the credit.
-- arbitrary windows and joins, so no settle gate, no step detection by day, no export-lag
-  measurement
-- **reproducibility** — a number from a console view that someone else cannot re-run is not
-  evidence in the way a query is
+**Use the Cost table, not just Reports.** Reports is for shape; the **Cost table** is expressly
+built for invoice reconciliation, exports CSV, and carries **credit type, name and id** per
+row. So two things this file used to call impossible are not: you *can* reconcile an invoice,
+and you *can* classify credits by type. What the Cost table will not tell you is a credit's
+contractual cap or expiry — for that you still need the agreement.
+
+Reports also supports **custom charge-date ranges** and **daily rows** in the CSV, so per-day
+movement and an observed change date are available too. Keep the distinction the export makes
+easy: an observed change *date* is not causal attribution.
+
+**What you genuinely lose:**
+- **export-delivery timestamps** (`export_time`), so no settle gate and no per-service lag
+- **arbitrary SQL and joins** across SKU, project, label and credit in one pass
+- **reproducibility** — a console view someone else cannot re-run is weaker evidence than a
+  query. Mitigate it: archive the report URL (it encodes the configuration), the explicit
+  dates, the filters, the download time, and the CSV itself.
 
 Set the report's time range deliberately, and note which view you used: **"Billing period"
 includes tax and adjustments; "Charge period" excludes them.**
 
 ### 2b. The Recommender API — free, and it is the one thing that finds waste for you
 
+Enable the Recommender API first — a read-only grant cannot do it for you.
+
 ```bash
 gcloud recommender recommendations list \
   --project=<PROJECT> --location=<ZONE_OR_REGION> \
   --recommender=google.compute.instance.IdleResourceRecommender \
-  --format="table(description,primaryImpact.costProjection.cost.units)"
+  --format=json        # keep the full JSON - see the warning below
 ```
 
 Useful recommender ids:
 
-| recommender | finds |
-|---|---|
-| `google.compute.instance.IdleResourceRecommender` | VMs doing nothing |
-| `google.compute.disk.IdleResourceRecommender` | unattached / unused disks |
-| `google.compute.address.IdleResourceRecommender` | reserved external IPs not in use |
-| `google.compute.instance.MachineTypeRecommender` | oversized VMs |
-| `google.cloudsql.instance.IdleRecommender`, `…OverprovisionedRecommender` | idle / oversized Cloud SQL |
-| `google.compute.commitment.UsageCommitmentRecommender` | commitment opportunities |
+| recommender | finds | `--location` |
+|---|---|---|
+| `google.compute.instance.IdleResourceRecommender` | VMs doing nothing | zone |
+| `google.compute.instance.MachineTypeRecommender` | oversized VMs | zone |
+| `google.compute.disk.IdleResourceRecommender` | unattached / unused disks | zone or region, matching the disk |
+| `google.compute.address.IdleResourceRecommender` | reserved external IPs not in use | region, or `global` |
+| `google.cloudsql.instance.IdleRecommender` / `…OverprovisionedRecommender` | idle / oversized Cloud SQL | region |
+| `google.compute.commitment.UsageCommitmentRecommender` | Compute **resource-based** commitment opportunities (not commitments generally) | project **or billing-account** scope depending on CUD sharing — check before assuming |
 
-These carry Google's **own** cost projection, so you get a priced list without any billing data.
-Two cautions: `--location` is per zone or region, so you must iterate over the ones you use; and
-an empty result means "nothing recommended **here**", not "nothing to find".
+You must iterate over the zones and regions you actually use, and an empty result means
+"nothing recommended **here**", not "nothing to find".
+
+⚠️ **Do not read `costProjection.cost.units` on its own.** It is only the whole-number part:
+it drops `nanos`, the currency, and the projection's duration — so a fractional saving prints
+as `0`, and an unlabelled number gets mistaken for monthly when it is not. Keep the JSON and
+compute `units + nanos/1e9`; a **negative** cost is the saving.
+
+⚠️ **These projections exclude credits and additional discounts**, and fall back to list price
+unless your permissions expose contract pricing. They are good for **prioritising**, and they
+are not a realisable saving — which is exactly the distinction Mode B's Step 3 is about.
 
 ### 2c. A structural sweep — find the waste from the resource APIs, price it after
 
@@ -126,9 +146,15 @@ gcloud run services list --format="table(name,region)"
 
 ⚠️ **Open the bucket before you name it** — a list is not a finding. Measured while writing this
 file: a sweep returned three "unattached" addresses, which looks like free money. All three were
-**internal** addresses, and internal addresses are not billed. Only a reserved **external** IP
-bills while unattached — and, separately, an external IP attached to a *stopped* instance bills
-too. Check the `addressType` column before you count anything.
+**internal**, and internal addresses — static or ephemeral — carry no address charge.
+
+Three qualifiers before you count an address as waste, because `status != IN_USE` is both
+over- and under-inclusive:
+- **external does not mean billable.** The charge is on IPv4; external **IPv6** has documented
+  no-charge cases, including static regional IPv6. Check `ipVersion`, not just `addressType`.
+- **a static external IPv4 on a *stopped* VM still bills** — and Google reports it as
+  `IN_USE`, so this filter misses it entirely. Look at VM state separately.
+- an *ephemeral* external IPv4 is released when the VM stops, so it is not the same case.
 
 ---
 
@@ -155,13 +181,17 @@ Until the export has two complete months in it, run Mode A like this:
 
 | step | with export | without |
 |---|---|---|
-| 0. settle gate | `settle-gate.sql` | **skip — and say the figures are unsettled** |
-| 1. invoice | `invoice-reconcile.sql` | the console invoice page, verbatim |
-| 2. run rate | last 7 settled days, gross | last complete month only; no run rate |
-| 3. step detection | `step-detect.sql` | month-over-month CSV diff; no step dates |
-| 4. new/resumed SKUs | `new-skus.sql` | diff the two CSVs on SKU name |
-| 5. regression sweep | — | **unchanged, and it is the most valuable step you still have** |
-| 6. one opportunity | — | **unchanged**, priced from the Recommender or the price list |
+| 0. settle gate | `settle-gate.sql` | **skip — no `export_time`.** Say the figures are unsettled |
+| 1. invoice | `invoice-reconcile.sql` | **Cost table CSV, unfiltered, unrounded**, against the invoice |
+| 2. run rate | last 7 settled days, gross | possible from daily CSV rows, but with no settle gate — quote it only with that caveat |
+| 3. step detection | `step-detect.sql` | daily Reports CSV gives the observed change **date**; attribution is still yours to establish |
+| 4. new/resumed SKUs | `new-skus.sql` | diff two CSVs on **SKU id**, not name — names change |
+| 5. regression sweep | — | **unchanged, and the most valuable step you still have** |
+| 6. one opportunity | — | an **estimated** saving with its pricing assumptions stated. Not the verified realisable saving Mode B asks for |
 
 Steps 5 and 6 need no billing data at all. If you only ever do those two, you are still ahead of
 an account nobody looks at.
+
+Note what moved in that table versus the pessimistic version: the console reconciles invoices
+and classifies credits perfectly well. The irreducible losses are **`export_time`** and
+**arbitrary SQL** — not attribution.

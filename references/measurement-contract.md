@@ -73,7 +73,11 @@ regardless of traffic. Good candidates, in rough order of reliability:
 - a managed cache or database instance with fixed capacity
 - a per-cluster or per-instance management fee
 - a reserved/static IP address charge
-- any committed-use or subscription line
+- a flat per-day storage or licence line
+
+(Deliberately **not** a committed-use or subscription line: those carry a
+`FEE_UTILIZATION_OFFSET` or similar by construction, which is exactly what rules a control
+out — see the warning below.)
 
 ⚠ **A control must carry no credit.** Check it with `credit-inventory.sql` first. The
 obvious candidate — a per-cluster or per-instance management fee — is often exactly the
@@ -121,6 +125,11 @@ days for the slowest**. So a gate built on a fast-arriving control passes while 
 service's rows for that same day are still days out — quote that service and you are quoting a
 partial. **Measure your own**; these are an order of magnitude, not a constant.
 
+Weight the alarm by money: on that account every service had fully landed within five days
+except the slowest, and the slowest billed **$0.00**. A service that arrives late and costs
+nothing does not threaten a conclusion. Sort your lag table next to the spend table before
+deciding which days you can use.
+
 That tells you which services are slow enough to distrust, in your account rather than in
 general. Do it once in Step 0 and record it. It does not make the gate sufficient — nothing
 does — but it stops you quoting a service whose rows are known to arrive days late.
@@ -163,17 +172,27 @@ for your arithmetic:
 
 | type | shape | what to do |
 |---|---|---|
-| `FREE_TIER` | an allowance — sometimes dollars, often **units** (e.g. free instance-hours) | judge on gross; subtract once, never below eligible spend. It does **not** always drain early: a unit allowance consumed by something always-on spreads across the whole month |
+| `FREE_TIER` | an allowance — sometimes dollars, often **units** (free instance-hours) | judge on gross; subtract once, never below eligible spend. It does **not** always drain early: a unit allowance consumed by something always-on spreads across the month. ⚠ Note a free tier does not always carry this `type` — one measured account books its GKE pot as plain `DISCOUNT` — so classify by behaviour too |
 | `PROMOTION` | trial, milestone or marketing credits; a balance that runs out | a strong candidate when a bill jumps for no structural reason — check the remaining balance and expiry before forecasting |
 | `DISCOUNT` | contractual, e.g. spend-threshold based | the daily shape tells you how it *behaved*, not what the contract says — find the contract before relying on it |
-| `SUSTAINED_USAGE_DISCOUNT` | applied monthly; can land unevenly across rows | aggregate over a whole month before taking any ratio — a narrow window can produce a ratio above 1, which is an artifact |
+| `SUSTAINED_USAGE_DISCOUNT` | proportional, up to ~30%; booked unevenly across rows | read it against the SKU's **full gross over a whole month**. Against credited rows alone the ratio exceeds 1 and is meaningless |
 | `COMMITTED_USAGE_DISCOUNT*`, `FEE_UTILIZATION_OFFSET` | tied to a commitment | the commitment is payable either way, so **a cut to covered usage can save ~nothing** — never price one without checking commitments |
 | `RESELLER_MARGIN`, `SUBSCRIPTION_BENEFIT` | you are billed through a reseller, or hold a support/subscription plan | your effective price is not list price. Do not price any change off public rates without checking the reseller agreement |
 
-⚠ **The "equal and opposite = proportional, round number = pot" heuristic is not reliable on
-its own.** Measured: a sustained-use discount produced a credit-to-cost ratio far above 1 on
-the rows it landed on, and a capped free-tier pot showed up as plain `DISCOUNT` at a range of
-fractions across different SKUs — neither carried the signature the heuristic looks for. **Classify from the daily series** (`credit-shape.sql`
+⚠ **Take the ratio against the SKU's FULL gross, never against the credited rows alone** — and
+be careful what you conclude if you got it wrong. An earlier draft of this file declared the
+ratio heuristic unreliable and cited a sustained-use discount at −5.2 and a "pot" at −0.50,
+−0.86 and −0.93. Every one of those numbers came out of the **broken inner-join query** that
+trap A10 is about: it compared each credit against only the rows carrying it. Re-measured with
+the corrected query, the same sustained-use discount reads a clean **30% of full SKU gross** —
+exactly its documented maximum — and the −0.50/−0.86/−0.93 figures turn out to belong to
+unrelated allocation-time and introductory discounts, not to a pot at all.
+
+So the heuristic is *usable* once the join is right. The lesson is narrower and more
+uncomfortable: **guidance derived from a buggy query inherits the bug**, and it reads as a
+finding about the world rather than about your SQL. Still confirm the shape against the daily
+series (`credit-shape.sql`, per credit name) and against `credits.type` before acting — a ratio
+tells you what happened inside your window, not what the contract says. **Classify from the daily series** (`credit-shape.sql`
 per credit name: a pot is flat then abruptly zero) and from `credits.type`, and use the
 ratio only as a hint.
 

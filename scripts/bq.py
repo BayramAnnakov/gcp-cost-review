@@ -27,14 +27,15 @@ except ImportError:
         "Missing dependency: google-cloud-bigquery.\n"
         "\n"
         "  python3 -m venv .venv && . .venv/bin/activate\n"
-        "  pip install -r requirements.txt\n"
+        "  python -m pip install -r requirements.txt\n"
         "\n"
-        "If pip itself is missing (common on slim Linux images):\n"
-        "  python3 -m ensurepip --upgrade\n"
-        "  # or install your distro's python3-pip and python3-venv packages\n"
+        "On a slim Debian/Ubuntu image pip and venv are absent and ensurepip cannot\n"
+        "repair that - install them first, as root:\n"
+        "  apt-get update && apt-get install -y python3-pip python3-venv\n"
         "\n"
-        "Credentials are separate, and need the Google Cloud CLI:\n"
-        "  gcloud auth application-default login"
+        "Credentials are separate:\n"
+        "  gcloud auth application-default login   # for these scripts (BigQuery)\n"
+        "  gcloud auth login                       # ALSO needed for gcloud resource sweeps"
     )
 
 

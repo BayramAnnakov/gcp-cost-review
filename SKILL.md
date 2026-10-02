@@ -59,11 +59,18 @@ worth more than any query here.
 
 | to… | you need | on |
 |---|---|---|
-| **read the bill** (console reports, invoices) | `roles/billing.viewer` — or `roles/billing.costsManager` | the **billing account** |
+| **read reports and invoices** | `roles/billing.viewer` | the **billing account** |
 | **query the export** | `roles/bigquery.dataViewer` on the export dataset **and** `roles/bigquery.jobUser` on whichever project runs the queries (often a different project) | BigQuery |
-| **sweep resources** for the structural audit | `roles/viewer`, plus `roles/recommender.viewer` for the Recommender API | each project |
-| **enable the export**, if it does not exist | `roles/billing.admin` | the billing account |
+| **sweep resources** for the structural audit | `roles/viewer`; for recommendations prefer the narrow roles (`recommender.computeViewer`, `recommender.cloudsqlViewer`) over blanket `recommender.viewer`, granted at the recommendation's own scope | each project |
+| **enable the export**, if it does not exist | `roles/billing.costsManager` **or** `roles/billing.admin` on the billing account, **plus** `roles/bigquery.user` on the destination dataset's project | both |
 | **act on a finding** | admin/editor for that specific service | the owning project |
+
+⚠️ Two traps in that table, both of which send people to the wrong person:
+- **`costsManager` is not a drop-in for `billing.viewer`.** It can read reports but lacks
+  `billing.accounts.getPaymentInfo`, so it cannot open invoice and payment documents.
+- **Enabling the export is not purely a billing-admin job.** It also needs BigQuery rights on
+  the *destination* project, so a finance admin acting alone may be unable to finish it. And
+  `costsManager` is enough on the billing side — you often do not need to ask for `admin`.
 
 **Everything this skill does to analyse is read-only**, and the first three rows are a modest,
 easy-to-justify ask — you can usually get them same-day. The last two are the ones that
@@ -191,11 +198,12 @@ opportunity is zero no matter how large the gross looks (trap A2).
 confident estimates go wrong:
 - a credit that looks proportional may be a **time-limited promotion**. When it expires
   the charge appears in full, so "net is $0" can mean "not yet".
-- **committed-use discounts can make a cut worth nothing**: the commitment is payable whether
-  you use it or not, so cutting covered usage reduces the usage charge and the offset together
-  and the account total barely moves. You will see the *fee* line's net rise — that is the
-  offset shrinking, not a cost increase. Check for commitments before promising a saving on
-  anything they cover.
+- **committed-use discounts floor your bill**: the commitment is payable whether you use it or
+  not, so below the commitment your net is roughly `max(fee, discounted_usage)` — cutting
+  covered usage moves the usage charge and the offset together and the total stays flat.
+  **Below the commitment the saving is zero, not negative.** You will see the *fee* line's net
+  rise, which looks alarming and is just the offset shrinking. Check for commitments before
+  promising a saving on anything they cover.
 - allowances shared across projects mean a saving in one project can be absorbed by
   another rather than banked.
 
@@ -224,22 +232,35 @@ safer and they cost nothing to sequence first.
 Write the expected number **before** you look: "SKU X falls from A/day to B/day; control
 stays at C." A prediction made after seeing the data is not a test.
 
-**First check your instrument can see it.** This is cheap, it takes one query, and skipping
-it is how people spend a week proving nothing.
+**First check your measurement plan can resolve it.** One query, and skipping it is how
+people spend a week proving nothing.
 
-Pull the SKU's daily series over a stable period and look at its day-to-day spread. If the
-saving you expect is smaller than the normal daily variation, **the billing data cannot
-confirm it** — not with more patience, not with a longer window, because you are reading a
-signal below the noise. A SKU that swings ±$3/day will never testify to a $2/day saving.
+The question is *not* "is the daily spread bigger than the saving" — that framing is wrong,
+and tempting. Averaging shrinks uncertainty: the standard error of a before/after difference
+is roughly `σ × √(1/n_before + 1/n_after)`, so with a daily spread of σ=$3 and 30 settled days
+each side you can resolve about $0.77/day — a $2/day change is detectable even though it is
+smaller than the day-to-day noise.
 
-When that happens you have three honest options, and "wait and see" is not among them:
-- **change instrument** — measure the *usage units* (requests, GiB, samples, node-hours),
-  which are usually far less noisy than the dollars derived from them
-- **measure structure instead of spend** — "the resource exists / does not exist", "the node
-  count went 4 → 3". A binary has no noise floor.
-- **say it is unverifiable** and take the change on reasoning, labelled as such
+So write down four things before you ship, not one:
+- **the minimum effect you would act on** (below it, you would not revert anyway)
+- **σ**, the daily spread of that SKU over a stable period
+- **the window** each side, and therefore the effect you can actually resolve
+- **what you are comparing against** — a before/after on the same SKU, or a control
 
-Decide which one *before* you ship, and write it next to the prediction. Finding out
+If the window you need is longer than the change will stay undisturbed, the plan cannot answer
+it, and the honest options are:
+- **measure usage units** (requests, GiB, node-hours). Not because they are inherently less
+  noisy — at a constant price the signal-to-noise is the same — but because they strip out
+  credits, tier boundaries and price changes, so you are measuring one thing instead of four.
+- **measure structure**: "the resource is gone", "nodes went 4 → 3". A binary has no noise
+  floor — but be clear it verifies the *change*, not the *saving*. A deleted resource can sit
+  alongside an unchanged commitment or demand that simply moved elsewhere.
+- **record it as "not detectable within this plan"** — which is a statement about your
+  measurement, not about the world. "Unverifiable" overclaims.
+
+⚠️ A longer window buys resolution and nothing else. Seasonality, autocorrelation, demand
+drift and a second change landing mid-window are not cured by waiting, and they are usually
+what actually defeats a cost measurement. That is what the control is for.
 afterwards that the measurement could never have shown the win is the expensive way round.
 
 Then verify only on days the settle gate passes, and look for the signature that

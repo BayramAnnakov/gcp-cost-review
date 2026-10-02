@@ -29,23 +29,29 @@ discover.
 
 ## Install
 
-**Prerequisites**, neither of which the clone gives you — checked in a clean container, where
-all three of `pip`, `pip3` and `python3 -m pip` were absent and so was `gcloud`:
+**Prerequisites**, neither of which the clone gives you — measured in a clean Debian container,
+where `pip`, `pip3`, `python3 -m pip` and `ensurepip` were all absent, and so was `gcloud`:
 
-- **Python 3.9+ with pip.** If `pip` is missing: `python3 -m ensurepip --upgrade`, or install
-  your distro's `python3-pip` and `python3-venv` packages.
-- **The Google Cloud CLI** (`gcloud`), which is a separate install — it is what provides the
-  credentials the queries run under.
+- **Python 3.9+ with pip and venv.** On slim Debian/Ubuntu images `ensurepip` cannot fix this;
+  install the distro packages as root first.
+- **The Google Cloud CLI** (`gcloud`) if you authenticate that way — it is a separate install.
+  (ADC does not *universally* require gcloud; an attached service identity or workload identity
+  federation works too. gcloud is simply the usual route on a laptop.)
 
 ```bash
 git clone https://github.com/BayramAnnakov/gcp-cost-review.git
 ln -s "$PWD/gcp-cost-review" ~/.claude/skills/gcp-cost-review
-
 cd gcp-cost-review
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
 
-gcloud auth application-default login
+# only if pip/venv are missing (slim Linux images), as root:
+apt-get update && apt-get install -y python3-pip python3-venv
+
+python3 -m venv .venv && . .venv/bin/activate
+python -m pip install -r requirements.txt
+
+gcloud auth application-default login   # credentials for the BigQuery queries
+gcloud auth login                       # ALSO needed for the gcloud resource sweeps —
+                                        # ADC alone does not authenticate those
 ```
 
 ### What access you need
@@ -88,9 +94,10 @@ answer:
 1. **An unsettled day reads low** — and it reads low across every service at once, which
    looks exactly like a successful optimization. (And the gate against it is necessary,
    not sufficient — services export on their own schedules.)
-2. **Credits come in two shapes** — a capped pot and a proportional discount share one
-   array. For the second, net is $0.00 and there is no opportunity however large gross
-   looks.
+2. **Credits come in several shapes** — free-tier pots, proportional discounts, promotions
+   that expire and commitments that floor your bill all share one array. Where a discount
+   already takes a SKU to $0.00 net there is no opportunity however large gross looks; where
+   a commitment covers it, cutting usage may save nothing at all.
 3. **Tiered allowances reset monthly** — a drop on the 1st is the calendar, not your work.
 4. **The credit draw is front-loaded** — so a late-month net run rate overstates the month.
 5. **The biggest mover may not be your change** — take credit for it and you will mislead

@@ -15,9 +15,16 @@ produces a confident wrong answer (trap A1).
 
 ### 0. Settle gate — `settle-gate.sql`
 
-Check the flat-rate control reads its known value for every day of the month being
-reviewed, and note the first unsettled day. Exclude that day and everything after it from
-every figure. If the month is not settled, stop and come back - do not "adjust for lag".
+Check the flat-rate control reads its known **gross** value for every day of the month being
+reviewed, and note the first day where it does not. Exclude that day and everything after it.
+If the month is not settled, stop and come back — do not "adjust for lag".
+
+**Then do the half people skip.** A passing control says the day is *not obviously* partial;
+it does not certify it, because services export on their own schedules. Put the per-service
+`export_lag_p95` from your calibration note next to this month's spend by service, and for any
+service that is both **slow and material**, check its own daily series before quoting it. A
+service that arrives late and bills ~nothing can be ignored; one that arrives late and is a top
+line cannot.
 
 ### 1. Invoice reconciliation — `invoice-reconcile.sql`
 
@@ -110,7 +117,8 @@ appendix.
 ```markdown
 # Cloud cost review - <MONTH>
 
-**Settled through <DATE>** (control SKU at its known value; later days excluded).
+**Settled through <DATE>** (control SKU at its known gross value; later days excluded).
+Slow-but-material services checked individually: <LIST, or "none">.
 
 ## Invoice
 Reconciled on `invoice.month` (see step 1) — not on a usage-date sum.
