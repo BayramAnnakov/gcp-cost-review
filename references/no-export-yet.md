@@ -24,7 +24,9 @@ Two decisions matter and both are easy to get wrong:
 | dataset **location** | **US or EU multi-region** | a *first* standard export into a multi-region dataset backfills from the start of the previous month. A region-specific dataset gets nothing retroactive. This is the only backfill on offer and it is one dropdown. |
 | **standard** vs **detailed** | start with standard | standard gives service, SKU, project, labels and credits — enough for almost all cost work. Detailed adds per-resource rows and costs more to store; add it later if one SKU turns out to be shared by many resources. |
 
-Backfill can take up to ~5 days to appear. Set it up, then carry on with the rest of this file.
+A third thing is easy to miss: the setup also requires the **BigQuery Data Transfer Service
+API** to be enabled on the destination project. Backfill then takes up to ~5 days to appear.
+Set it up, then carry on with the rest of this file.
 
 **There is no CLI for this.** `gcloud billing` has no export subcommand — checked, not assumed.
 So if you have an agent with browser control, enabling the export is a legitimate and
@@ -42,10 +44,11 @@ but scripted clicking is the wrong instrument for a measurement:
 - **a figure read off a rendered page is not reproducible**, which is the exact property this
   whole method exists to provide. If you do obtain a number that way, label it as unreproducible
   in the report.
-- **absence of evidence is especially unsafe here.** Browser tooling commonly redacts tool output
-  containing query strings or cookies, and billing console URLs are query-string heavy — so "the
-  automation didn't see it" can simply mean the output was filtered. Compute what you need in the
-  page and return derived values (counts, booleans, a total), not screenshots of tables.
+- **absence of evidence is especially unsafe here.** Some agent browser integrations redact tool
+  output containing query strings or cookies — and billing console URLs are query-string heavy —
+  so "the automation didn't see it" can mean the output was filtered rather than absent. Check
+  whether yours does this before trusting a negative. Either way, compute what you need in the
+  page and return derived values (counts, booleans, a total) rather than screenshots of tables.
 
 So: **browser for the one-time setup, CSV for the data.**
 
@@ -106,11 +109,15 @@ Useful recommender ids:
 | `google.compute.instance.MachineTypeRecommender` | oversized VMs | zone |
 | `google.compute.disk.IdleResourceRecommender` | unattached / unused disks | zone or region, matching the disk |
 | `google.compute.address.IdleResourceRecommender` | reserved external IPs not in use | region, or `global` |
-| `google.cloudsql.instance.IdleRecommender` / `…OverprovisionedRecommender` | idle / oversized Cloud SQL | region |
+| `google.cloudsql.instance.IdleRecommender` | idle Cloud SQL | region |
+| `google.cloudsql.instance.OverprovisionedRecommender` | oversized Cloud SQL | region |
 | `google.compute.commitment.UsageCommitmentRecommender` | Compute **resource-based** commitment opportunities (not commitments generally) | project **or billing-account** scope depending on CUD sharing — check before assuming |
 
-You must iterate over the zones and regions you actually use, and an empty result means
-"nothing recommended **here**", not "nothing to find".
+You must iterate over the zones and regions you actually use. An empty result means "nothing
+recommended **here**" — **or that you asked at the wrong granularity**, which is the trap:
+measured, asking a zone-scoped recommender at a region (or a region-scoped one at a zone)
+returns an empty list with **exit code 0 and no warning**. Only a bogus recommender id errors.
+Match the granularity in the table above before concluding there is nothing to find.
 
 ⚠️ **Do not read `costProjection.cost.units` on its own.** It is only the whole-number part:
 it drops `nanos`, the currency, and the projection's duration — so a fractional saving prints
@@ -139,9 +146,13 @@ gcloud compute addresses list --filter="status!=IN_USE" \
 gcloud compute disks list --filter="-users:*" --format="table(name,sizeGb,zone)"
 gcloud compute snapshots list --format="table(name,diskSizeGb,creationTimestamp)"
 
-# serverless services pinned always-on
-gcloud run services list --format="table(name,region)"
-# then per service: minimum instances and the CPU-allocation annotation
+# serverless services, with the two settings that drive cost, in one pass
+# cpu-throttling=false means instance-based billing; minScale>0 keeps instances warm
+gcloud run services list --format="table(
+  metadata.name,
+  metadata.labels['cloud.googleapis.com/location'],
+  spec.template.metadata.annotations['autoscaling.knative.dev/minScale'],
+  spec.template.metadata.annotations['run.googleapis.com/cpu-throttling'])"
 ```
 
 ⚠️ **Open the bucket before you name it** — a list is not a finding. Measured while writing this
@@ -156,24 +167,33 @@ over- and under-inclusive:
   `IN_USE`, so this filter misses it entirely. Look at VM state separately.
 - an *ephemeral* external IPv4 is released when the VM stops, so it is not the same case.
 
+And note the direction people usually get wrong: an external IPv4 **in use on a running VM
+still bills**, just at a lower hourly rate than an idle reserved one. Forwarding-rule IPs are
+free. So "unattached" is where the easy money is, but it is not the whole bill.
+
 ---
 
 ## 3. What you genuinely cannot do, and should not pretend to
 
-Say these out loud rather than producing a number with false precision:
+The list is shorter than you would expect, and shorter than an earlier draft of this file
+claimed. These four are the real losses:
 
-- **reconcile an invoice** — needs `invoice.month` and the non-`regular` rows
-- **settle-gate a day**, or know your per-service export lag
-- **find a step date**, which is what separates "something changed" from "we changed it"
-- **classify credits**, so no capped-pot-vs-proportional call, so no safe pricing of anything
-  that carries a credit
-- **a defensible run rate**, because you cannot tell a complete day from a partial one
+- **`export_time`**, so no measured per-service export lag. You can still run a settle gate —
+  a flat control SKU read off a Date > SKU CSV is the same instrument — but you cannot know
+  which *other* services are still arriving.
+- **per-row and per-day credit amounts.** The Cost table tells you a credit's *type and name*
+  per SKU, so trap A2 is detectable; what you cannot see is the daily shape that distinguishes
+  a draining pot from a proportional discount at the row level.
+- **arbitrary SQL** — joins across SKU, project, label and credit in one pass, and windows that
+  are not a date range.
+- **reproducibility by query.** Archive the report URL, the explicit dates, the filters, the
+  download time and the CSV, and a reader can at least re-create the view.
 
-A cost review built on 2a–2c is a **structural audit with estimated prices**. That is genuinely
-useful and worth doing this week. It is not the measured review, and labelling it as one is the
-failure this whole skill exists to prevent.
-
----
+A cost review built on 2a–2c is a **structural audit with console-grade measurement**. That is
+genuinely useful and worth doing this week. What it is not is a *verified realisable* saving:
+the Recommender's projections exclude credits and discounts, and without `export_time` you
+cannot say a day is complete. Label it accordingly — that is the failure this whole skill
+exists to prevent.
 
 ## 4. The degraded monthly review
 
@@ -181,7 +201,7 @@ Until the export has two complete months in it, run Mode A like this:
 
 | step | with export | without |
 |---|---|---|
-| 0. settle gate | `settle-gate.sql` | **skip — no `export_time`.** Say the figures are unsettled |
+| 0. settle gate | `settle-gate.sql` | **works** — read a flat control SKU off a Date > SKU CSV. What you lose is the per-service lag check, so say which services are unverified |
 | 1. invoice | `invoice-reconcile.sql` | **Cost table CSV, unfiltered, unrounded**, against the invoice |
 | 2. run rate | last 7 settled days, gross | possible from daily CSV rows, but with no settle gate — quote it only with that caveat |
 | 3. step detection | `step-detect.sql` | daily Reports CSV gives the observed change **date**; attribution is still yours to establish |

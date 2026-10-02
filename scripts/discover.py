@@ -12,6 +12,7 @@ costs money on a large export, so it is opt-in and capped.
 """
 import argparse
 import sys
+from pathlib import Path
 
 try:
     import google.auth
@@ -21,7 +22,7 @@ except ImportError:
         "Missing dependency: google-cloud-bigquery.\n"
         "\n"
         "  python3 -m venv .venv && . .venv/bin/activate\n"
-        "  python -m pip install -r requirements.txt\n"
+        "  python -m pip install -r " + str(Path(__file__).resolve().parents[1] / "requirements.txt") + "\n"
         "\n"
         "On a slim Debian/Ubuntu image pip and venv are absent and ensurepip cannot\n"
         "repair that - install them first, as root:\n"

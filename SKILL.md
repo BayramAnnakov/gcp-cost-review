@@ -62,7 +62,7 @@ worth more than any query here.
 | **read reports and invoices** | `roles/billing.viewer` | the **billing account** |
 | **query the export** | `roles/bigquery.dataViewer` on the export dataset **and** `roles/bigquery.jobUser` on whichever project runs the queries (often a different project) | BigQuery |
 | **sweep resources** for the structural audit | `roles/viewer`; for recommendations prefer the narrow roles (`recommender.computeViewer`, `recommender.cloudsqlViewer`) over blanket `recommender.viewer`, granted at the recommendation's own scope | each project |
-| **enable the export**, if it does not exist | `roles/billing.costsManager` **or** `roles/billing.admin` on the billing account, **plus** `roles/bigquery.user` on the destination dataset's project | both |
+| **enable the export**, if it does not exist | `roles/billing.costsManager` **or** `roles/billing.admin` on the billing account, **plus** `roles/bigquery.user` on the destination dataset's project — and the **BigQuery Data Transfer Service API** enabled there | both |
 | **act on a finding** | admin/editor for that specific service | the owning project |
 
 ⚠️ Two traps in that table, both of which send people to the wrong person:
@@ -244,8 +244,11 @@ smaller than the day-to-day noise.
 So write down four things before you ship, not one:
 - **the minimum effect you would act on** (below it, you would not revert anyway)
 - **σ**, the daily spread of that SKU over a stable period
-- **the window** each side, and therefore the effect you can actually resolve
-- **what you are comparing against** — a before/after on the same SKU, or a control
+- **the window** each side — the test is `Δ / (σ·√(2/n))`, so n is doing the work
+- **the control** you will hold alongside it
+
+Measured on a real export, two SKUs whose savings were *smaller than their own daily spread*
+both resolve comfortably in a single month. The spread alone tells you nothing.
 
 If the window you need is longer than the change will stay undisturbed, the plan cannot answer
 it, and the honest options are:
@@ -258,9 +261,20 @@ it, and the honest options are:
 - **record it as "not detectable within this plan"** — which is a statement about your
   measurement, not about the world. "Unverifiable" overclaims.
 
-⚠️ A longer window buys resolution and nothing else. Seasonality, autocorrelation, demand
-drift and a second change landing mid-window are not cured by waiting, and they are usually
-what actually defeats a cost measurement. That is what the control is for.
+⚠️ **A longer window buys resolution and nothing else — and resolution is rarely what beats
+you.** Seasonality, a weekday cycle, demand drift and a second change landing mid-window are
+not cured by waiting, and they are what actually defeats a cost measurement. Two cheap
+defences, and you already have both:
+
+- **compare like with like in time**: 7-day sums, or same-weekday pairs. A Tuesday-to-Sunday
+  comparison measures the week, not your change.
+- **use the control group from Step 0.3 as a difference-in-differences.** The question is not
+  "did this SKU fall" but "did it fall *more than the control did over the same window*". That
+  subtracts whatever moved both, which is exactly the seasonality and demand drift a longer
+  window cannot touch. If the control moved too, you have measured the business, not the change.
+
+Fall back to usage units, a structural binary, or "not detectable within this plan" only after
+those two have failed — not instead of trying them.
 afterwards that the measurement could never have shown the win is the expensive way round.
 
 Then verify only on days the settle gate passes, and look for the signature that
