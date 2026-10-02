@@ -29,14 +29,32 @@ discover.
 ## Install
 
 ```bash
-git clone https://github.com/<you>/gcp-cost-review.git
+git clone https://github.com/bayramannakov/gcp-cost-review.git
 ln -s "$PWD/gcp-cost-review" ~/.claude/skills/gcp-cost-review
 pip install google-cloud-bigquery
 gcloud auth application-default login
 ```
 
+**You also need BigQuery access, which the login above does not grant.** On the project
+that holds the billing export you need to read the data (`roles/bigquery.dataViewer`, or
+`bigquery.tables.getData` + `tables.get`), and on whichever project runs the queries you
+need `bigquery.jobs.create` (`roles/bigquery.jobUser`). They are often different projects.
+Check with:
+
+```bash
+python scripts/discover.py                    # tries your ADC quota + default projects
+python scripts/discover.py my-billing-project # or name it explicitly
+```
+
+Querying the export is **billed on bytes scanned**, so `scripts/bq.py` dry-runs every
+query, prints the estimate, and refuses anything over `--max-gb` (default 20).
+
 Then just ask: *"why did our GCP bill go up last month?"* or *"run the monthly cloud cost
 review"*.
+
+**Keep your outputs out of git.** The export table name contains your billing account id
+and the reports contain real spend. `.gitignore` already excludes `cost-reviews/` and
+`calibration.local.md`; keep the calibration note outside the repo if you can.
 
 ## The five ways the billing export will mislead you
 
@@ -44,7 +62,8 @@ These are the reason the skill exists. Each has produced a confident, wrong, exp
 answer:
 
 1. **An unsettled day reads low** — and it reads low across every service at once, which
-   looks exactly like a successful optimization.
+   looks exactly like a successful optimization. (And the gate against it is necessary,
+   not sufficient — services export on their own schedules.)
 2. **Credits come in two shapes** — a capped pot and a proportional discount share one
    array. For the second, net is $0.00 and there is no opportunity however large gross
    looks.
@@ -67,8 +86,9 @@ judge.
 
 **Zero versus a fraction.** When you claim a change worked, show the controls. A partial
 export yields a *fraction* of something; a change to zero yields *zero*. "It went to zero"
-is weak. "It went to zero while ten unrelated workloads all sat at 83–84% of yesterday"
-is conclusive.
+is weak; "it went to zero while ten unrelated workloads all sat at 83–84% of yesterday" is
+strong. Check the **row count** too — zero dollars across a normal number of rows is a real
+zero, while zero dollars across zero rows is missing data wearing the same costume.
 
 ## What this skill does not do
 
@@ -81,4 +101,4 @@ is conclusive.
 
 ## Licence
 
-MIT.
+MIT — see [LICENSE](LICENSE).

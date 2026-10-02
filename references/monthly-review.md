@@ -13,37 +13,55 @@ produces a confident wrong answer (trap A1).
 
 ## The loop
 
-### 0. Settle gate
+### 0. Settle gate — `settle-gate.sql`
 
 Check the flat-rate control reads its known value for every day of the month being
 reviewed, and note the first unsettled day. Exclude that day and everything after it from
 every figure. If the month is not settled, stop and come back - do not "adjust for lag".
 
-### 1. Invoice reconciliation
+### 1. Invoice reconciliation — `invoice-reconcile.sql`
 
-Last complete month vs the one before, as the user will see it on the invoice:
+Last complete month vs the one before, as the user will see it on the invoice. Use
+`assets/queries/invoice-reconcile.sql`, which differs from every other query here on
+purpose:
 
-`regular gross` → `credits` → `net` → `tax` → `adjustments` → **invoice**
+- it groups on **`invoice.month`**, not on a usage date — a row can land on a different
+  invoice than its usage date implies, because late-arriving usage is billed on the next one
+- it does **not** filter `cost_type`, because tax and adjustments are on the invoice
 
-Quote the invoice figure, not just the usage figure. People reconcile against the
-invoice, and a report that does not match it gets discarded.
+`regular gross` → `tax` → `adjustments` → `credits` → **invoice total**
+
+Quote the invoice figure, not a usage-date sum. People reconcile against the invoice, and
+a report that does not match it gets discarded — and the two genuinely differ.
 
 Note if tax looks incomplete (it is exported late) and say so rather than quietly
 under-reporting.
 
-### 2. Run rate
+### 2. Run rate — `sku-run-rate.sql`, `credit-shape.sql`
 
 The last settled 7 days, **on gross**, normalised ×30.44. This is what next month looks
 like if nothing changes - more useful than the month just closed, because mid-month
 changes are only partly reflected in a monthly total.
 
-Subtract the credit pot separately (trap A5).
+Then re-apply credits deliberately rather than by one subtraction, because a flat
+"minus the pot" quietly contradicts the rules above:
+- **capped pot** → subtract it once, and never below the eligible spend. If projected
+  gross for that SKU is 50 and the allowance is 70, the answer is 0, not −20.
+- **proportional discount** → scale with the projection, do not subtract a constant.
+- **tiered allowance** → if the 7-day window sat inside the free allowance, extrapolating
+  it projects $0 for a service that will start billing mid-month. Project the month's
+  **usage** against the allowance, then price it.
+- **fixed monthly fees** (cluster fees, subscriptions) → carry them as monthly constants
+  rather than ×30.44 of a daily slice.
+
+A single number is still fine to publish. Just build it from those four, and say which
+input is doing the work.
 
 Split **demand-driven** lines (model APIs, egress, anything that scales with usage) from
 **structural** lines (instances, fees, storage). They behave differently and mixing them
 makes both unreadable.
 
-### 3. Step detection
+### 3. Step detection — `month-over-month.sql`, then `by-project.sql`, then `step-detect.sql`
 
 For every service that moved more than ~10% or more than a material absolute amount,
 pull the daily series and find the step date. Then name the cause. Three outcomes, all
@@ -54,7 +72,7 @@ acceptable, but say which:
 - **unattributed** - you could not name it. Write it down as unattributed rather than
   guessing; an unexplained step is itself a finding worth carrying forward.
 
-### 4. New-SKU check
+### 4. New-or-resumed SKU check — `new-skus.sql`
 
 The highest-value five minutes in the whole review, and the one most people skip.
 
@@ -63,7 +81,7 @@ start, and they are invisible in a service-level month-over-month view because t
 small at first and buried inside a service that already had spend.
 
 Report them as "this was reliably zero until date D" and resist annualising a lumpy new
-series (trap A7).
+series (trap A8).
 
 ### 5. Regression sweep
 
@@ -95,13 +113,15 @@ appendix.
 **Settled through <DATE>** (control SKU at its known value; later days excluded).
 
 ## Invoice
-| | <PREV MONTH> | <MONTH> |
+Reconciled on `invoice.month` (see step 1) — not on a usage-date sum.
+
+| `invoice.month` | <PREV> | <CURR> |
 |---|---:|---:|
 | regular gross | | |
-| credits | | |
-| net | | |
 | tax | | |
-| **invoice** | | |
+| adjustments / rounding | | |
+| credits | | |
+| **invoice total** | | |
 
 **<DELTA>, <PCT>.**
 
@@ -140,8 +160,11 @@ surprise comes from.
 
 ## Making it stick
 
-- Keep the calibration note and the prior reviews in the repo, so each month starts from
-  the last one instead of from scratch.
+- Keep the calibration note and the prior reviews where the next session will find them,
+  so each month starts from the last one instead of from scratch — but **not in a public
+  repo**. The export table id embeds your billing account id and the reports carry real
+  spend. Use a private directory and a `.gitignore` entry; publish only redacted or
+  synthetic versions.
 - Record a **prediction** each month ("next month lands near X") and check it next time.
   A review that never commits to a number cannot be wrong, and therefore never improves.
 - Carry unattributed steps forward until they are explained or go away.

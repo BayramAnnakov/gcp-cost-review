@@ -15,8 +15,8 @@
     },
     {
       "id": 3,
-      "prompt": "i found network intelligence center costing us like $60/mo in the billing console. worth turning off? what breaks?",
-      "expected_output": "Checks the credits array BEFORE pricing, discovers the 100% proportional discount, and reports that the net saving is $0.00 rather than recommending the change.",
+      "prompt": "theres a networking SKU in our billing console thats showing a couple hundred bucks a quarter and nobody knows what it is. worth turning off? what breaks?",
+      "expected_output": "Checks the credits array for those SKUs BEFORE pricing, using a query that does not drop uncredited rows. Reports the NET figure, and if a discount covers it says the saving is $0. Does not assume a discount applies - NIC pricing is per-module and some modules bill. Also names what the user loses before recommending removal.",
       "files": []
     },
     {

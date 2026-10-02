@@ -5,7 +5,7 @@ WITH d AS (
          cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0) AS net
   FROM `<BILLING_EXPORT_TABLE>`
   WHERE cost_type = 'regular'
-    AND DATE(usage_start_time, '<ACCOUNT_TIMEZONE>') BETWEEN '<START>' AND '<END>'
+    AND DATE(usage_start_time, 'America/Los_Angeles') BETWEEN '<START>' AND '<END>'
 ), n AS (SELECT DATE_DIFF(DATE '<END>', DATE '<START>', DAY) + 1 AS days)
 SELECT svc, sku,
        ROUND(SUM(gross) / ANY_VALUE(n.days) * 30.44, 2) AS gross_mo,

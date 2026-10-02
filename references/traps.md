@@ -22,8 +22,8 @@ ones you did not touch.
 off saves nothing and may break something.
 **Tell:** sum the `credits` array for that SKU. If it equals `-gross`, the opportunity is
 zero.
-**Paid for:** a service was written up as a four-figure annual saving, scheduled for
-removal, and was $0.00 net the whole time. It was caught only because an external source
+**Paid for:** a service was written up as a recurring saving, scheduled for removal, and
+was $0.00 net the whole time. It was caught only because an external source
 contradicted the claim. Afterwards, sweeping *every* SKU above a threshold for matching
 credits found a second one in the same state.
 **Rule:** check the credit shape before pricing anything. The habit of "judge on gross"
@@ -53,7 +53,21 @@ late days carry almost no credit and X is too high.
 **Tell:** daily credit totals step down sharply after the first week.
 **Rule:** project on gross and subtract the pot as a monthly constant.
 
-### A6. Crediting your own work for someone else's change
+### A6. Quoting an invoice from a usage-date sum
+
+**Looks like:** summing `cost_type = 'regular'` by usage date gives the month's bill.
+**Actually:** it gives neither. An invoice is keyed on `invoice.month`, and a usage row
+can land on a different invoice than its usage date implies, because late-arriving usage
+is billed on the next one. And `cost_type = 'regular'` silently drops **tax and
+adjustments**, which are on the invoice.
+**Tell:** your figure does not match what finance sees, usually by a small but
+embarrassing amount.
+**Rule:** two different questions, two different keys. *"What did we consume, and when"*
+→ usage date, `cost_type='regular'`. *"What were we charged"* → `invoice.month`, no
+`cost_type` filter. Use `assets/queries/invoice-reconcile.sql` for the second, and never
+quote a bill from the first.
+
+### A7. Crediting your own work for someone else's change
 
 **Looks like:** the biggest line in the month-over-month diff fell dramatically right
 when you were working.
@@ -65,7 +79,7 @@ cannot name it, you do not own it.
 flip on an unrelated day. The honest attributable figure was roughly a third of the
 headline.
 
-### A7. Treating a lumpy new line as a run rate
+### A8. Treating a lumpy new line as a run rate
 
 **Looks like:** a new SKU appeared and a 7-day extrapolation says it is material.
 **Actually:** the daily values span two orders of magnitude and there is no baseline.
@@ -73,7 +87,7 @@ headline.
 **Rule:** report "this was reliably zero and is now not, starting on date D" - which is
 the actionable fact - and refuse to annualise it until it stabilises.
 
-### A8. A command that fails through a pipe and still exits 0
+### A9. A command that fails through a pipe and still exits 0
 
 **Looks like:** `<cmd> | wc -l` returns a plausible count.
 **Actually:** the command errored and you counted the lines of the error message. Expired
@@ -81,6 +95,20 @@ credentials and disabled APIs both do this.
 **Tell:** run the command bare before piping it. Check that the output looks like data.
 **Rule:** prefer application-default credentials over short-lived printed tokens for
 anything scripted, and never let a pipeline be the first place a command runs.
+
+### A10. An `UNNEST` join silently drops the rows you need
+
+**Looks like:** `FROM export, UNNEST(credits) c` then comparing `SUM(c.amount)` to
+`SUM(cost)` tells you what share of a SKU is discounted.
+**Actually:** that is an inner join. Rows with an **empty** credits array disappear, so
+you compared the credit against only the *credited* rows' cost. A SKU with one credited
+$5 row and one uncredited $95 row reads as 100% discounted while costing $95 net.
+**Tell:** a SKU you know you pay for shows ~100% offset.
+**Paid for:** a cluster-fee SKU read as almost fully covered by a free tier. Corrected, it
+was 37% offset and the rest was a real bill.
+**Rule:** aggregate the full total first, and pull the nested values per row with a
+scalar subquery (`(SELECT SUM(c.amount) FROM UNNEST(credits) c)`), which keeps rows whose
+array is empty. The same trap applies to `labels` and `system_labels`.
 
 ---
 
@@ -116,7 +144,34 @@ workload can get slower while saving less than modelled.
 **Rule:** treat request right-sizing as a performance change that happens to affect cost.
 Prove it with a load test, not a spreadsheet.
 
-### B4. Summing items that are not additive
+### B4. Mistaking credit arithmetic for the economics of removal
+
+**Looks like:** this SKU's credits cancel its cost, so there is nothing to save; or, this
+SKU has no credit, so removing it saves the full amount.
+**Actually:** both can be wrong, because a credit is a billing artifact and removal is an
+economic question.
+- a 100% discount may be a **time-limited promotion**. "Net is $0" can mean "not yet".
+- a **committed-use discount inverts the sign**: with a spend-based commitment, reducing
+  usage can *raise* the net bill, because the commitment fee stays while its utilisation
+  offset shrinks.
+- allowances shared across projects mean a saving in one project is absorbed by another.
+**Tell:** the credit's `name` mentions a promotion, trial or commitment; or the account
+has committed-use discounts at all.
+**Rule:** read the credit's name and expiry, not just its magnitude, and sanity-check any
+material claim as an account-level before/after rather than a per-SKU subtraction.
+
+### B5. On GKE Standard, stopping pods does not stop the bill
+
+**Looks like:** scaling staging workloads to zero saves their share of the cluster cost.
+**Actually:** that is true on **Autopilot**, which bills pod *requests*. **Standard** bills
+*nodes*. Pods going away changes nothing until the autoscaler removes a VM — and it will
+not if the pool has a non-zero minimum, or DaemonSets, system pods or another workload
+keep the node occupied.
+**Tell:** pods are at zero and the node count has not moved.
+**Rule:** on Standard, price "can a node be removed", and verify with the node count after
+the change, not the pod count.
+
+### B6. Summing items that are not additive
 
 Two savings can overlap (deleting a cluster removes the nodes *and* the fee *and* some
 network charges counted separately), or be mutually exclusive, or be ordered (A is only
@@ -158,7 +213,16 @@ world.
 **Rule:** read the live configuration back from the running system as the first step of
 any verification, and say that you did.
 
-### C5. Scripts that only ran on your machine
+### C5. Running up a BigQuery bill while looking for savings
+
+**Looks like:** exploring the export is free.
+**Actually:** you are billed on bytes scanned, and a detailed export on a large account is
+big. Wide date ranges and `SELECT *` over it cost real money.
+**Rule:** dry-run first (`bq.py --dry-run` prints the estimate), cap with
+`maximum_bytes_billed`, keep windows narrow, and read table metadata rather than querying
+when metadata will do.
+
+### C6. Scripts that only ran on your machine
 
 Portability bugs show up in cost tooling constantly because it is written quickly and
 run rarely: shell builtins that differ between versions, `sed`/`date` flags that differ

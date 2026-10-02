@@ -1,12 +1,12 @@
 -- Service-level month over month, day-normalised to 30.44 so unequal months compare.
 -- Both bases are shown on purpose: use GROSS where a capped-pot credit applies.
 WITH d AS (
-  SELECT DATE(usage_start_time, '<ACCOUNT_TIMEZONE>') AS pt,
+  SELECT DATE(usage_start_time, 'America/Los_Angeles') AS pt,
          service.description AS svc, cost AS gross,
          cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0) AS net
   FROM `<BILLING_EXPORT_TABLE>`
   WHERE cost_type = 'regular'
-    AND DATE(usage_start_time, '<ACCOUNT_TIMEZONE>') BETWEEN '<PREV_START>' AND '<CURR_END>'
+    AND DATE(usage_start_time, 'America/Los_Angeles') BETWEEN '<PREV_START>' AND '<CURR_END>'
 ), n AS (
   SELECT DATE_DIFF(DATE '<PREV_END>',  DATE '<PREV_START>', DAY) + 1 AS prev_days,
          DATE_DIFF(DATE '<CURR_END>',  DATE '<CURR_START>', DAY) + 1 AS curr_days

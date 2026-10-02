@@ -4,9 +4,11 @@ Ordered roughly by how much is usually there and how safely it comes out. For ea
 what to look for, how to price it, and the specific thing that makes the naive estimate
 wrong.
 
-A useful prior before you start: in most small-to-mid accounts the bill is dominated by
-**things that are always on but rarely used**, not by things that are busy. Idle
-capacity, not traffic, is the target.
+A hypothesis to test early, not a fact to assume: idle capacity is often a bigger share
+of a bill than busy capacity. It is worth checking first because it is cheap to check and
+safe to fix — but **establish your own account's distribution before believing it**. Run
+`sku-run-rate.sql` and look. An account dominated by egress, model APIs or storage has a
+different shape, and starting from the wrong prior wastes the whole engagement.
 
 ---
 
@@ -21,6 +23,18 @@ message volume it served in the last 30 days.
 **Trap:** the realisable number is much lower than the gross. An environment used two
 hours a day does not save 92% - you still pay for the storage, the addresses, the cold
 starts and the hours somebody forgets to turn it off.
+
+**⚠ On Kubernetes, know which billing model you are on before pricing anything.** They
+behave oppositely:
+- **Autopilot** bills *pod resource requests*. Scaling a workload to zero removes the
+  charge directly, so the saving is real and immediate.
+- **Standard** bills *nodes*. Deleting pods changes nothing by itself — you keep paying
+  for the VMs until the cluster autoscaler actually removes them, and it will not if the
+  node pool has a non-zero minimum, or if DaemonSets, system pods or an unrelated
+  workload keep the node occupied.
+
+So on Standard, the saving is "can a node be removed", not "can a pod be stopped". Verify
+against the node count after the change, not the pod count.
 
 **If you make it on-demand, you need three things or it will cost more than it saves:**
 a one-command way to bring it up, a **lease with an automatic reaper** so a forgotten
@@ -38,12 +52,25 @@ continuously or only during requests. A minimum-instance setting, or a
 "CPU always allocated" / "no CPU throttling" flag, converts a pay-per-request service
 into a pay-per-hour one.
 
-**Check:** minimum instances and the CPU-allocation flag on every service.
+**Check:** minimum instances *and*, separately, the CPU-allocation setting. They are two
+different things and conflating them produces wrong prices: a request-billed service can
+still have minimum instances and still accrue idle charges, and Cloud Run **jobs** are
+always instance-billed regardless.
 **Price:** the instance-based SKU lines, split by region.
-**Trap:** a service that is genuinely never idle saves ~nothing from min-instances=0,
-because it would hold the instance anyway. Measure the actual gap between requests before
-pricing it. Conversely, flipping CPU throttling back on for a batch-style service can be
-one of the largest single wins available, and it is a one-line config change.
+
+**Trap 1:** a service that is genuinely never idle saves ~nothing from `min-instances=0`,
+because it would hold the instance anyway. Measure the real gap between requests first.
+
+**⚠ Trap 2, and this one can break production.** Turning CPU throttling back *on* is
+sometimes a large one-line win — and sometimes an outage. CPU-always-allocated exists so a
+container can do work **outside** a request: background goroutines, async flushes, queue
+consumers, retries and telemetry after the response is sent. Throttled, that work is
+suspended between requests and may never finish.
+
+Before changing it, establish that the service does nothing outside the request lifecycle
+— from its code and its traces, not from its name. "Batch-style" is a guess about a
+service; it is not a property you can read off the billing export. If you cannot establish
+it, leave the flag alone and take the saving elsewhere.
 
 ## 3. Cluster and control-plane fees
 
@@ -64,8 +91,12 @@ actually appear in dashboards or alerts. Per-container and per-node metric colle
 produce an enormous sample volume for data nobody queries. Same for log sinks that
 duplicate what another system already stores.
 **Price:** samples or GiB ingested, converted at the published rate.
-**Trap:** these are **tiered** services, so dollars mislead (traps A3, A4). Measure in
-usage units. Also confirm what reads the data *before* disabling: the answer is often
+**Trap:** pricing models differ *within* observability, so one rule does not cover it.
+Cloud Monitoring metrics are byte-priced with a monthly free allotment, so dollars
+mislead and you should measure usage units (traps A3, A4). **Managed Service for
+Prometheus is priced per sample ingested and has no free allotment**, so its dollars track
+volume directly from the first sample. Check which one you are looking at before applying
+either rule, and read `usage.amount` and `usage.pricing_unit` rather than assuming. Also confirm what reads the data *before* disabling: the answer is often
 "one dashboard nobody opens", but occasionally it is an alert that matters.
 **Identify the source precisely.** Group ingested samples by metric family before
 blaming a component; it is easy to accuse the wrong collector and disable something
@@ -122,6 +153,12 @@ common silent cost.
 scheduler.
 
 ## 10. The model bill, once infrastructure is tidy
+
+⚠ **Only Google's own model APIs (Vertex AI, Gemini API) appear in this export.** Anthropic,
+OpenAI and other vendors bill separately and are invisible here, so a "total AI spend"
+built from the billing export alone will understate it, sometimes to zero. Pull those from
+each vendor's console or your observability layer and say that you combined sources.
+
 
 In AI-heavy accounts the model API quickly becomes the largest line, and infrastructure
 optimization has a floor. Once the infra lever is spent, the remaining levers are

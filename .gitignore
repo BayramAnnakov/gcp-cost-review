@@ -1,3 +1,9 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# Cost-review outputs contain billing account ids and real spend. Never commit them.
+cost-reviews/
+calibration.local.md
+*.costreview.md
+*.local.env
