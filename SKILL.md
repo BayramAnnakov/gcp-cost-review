@@ -42,7 +42,8 @@ and expensive answer in real engagements.
 ## Pick a mode
 
 **Mode A - Monthly review** (recurring, ~30 min): has anything changed, did prior
-savings hold, what is new. Read `references/monthly-review.md`.
+savings hold, what is new. Read `references/monthly-review.md`, and `schedule/README.md`
+to put it on a timer — a review that depends on someone remembering does not happen.
 
 **Mode B - Optimization engagement** (one-off, multi-session): find, price, ship and
 verify savings. Continue below, then read `references/where-the-money-hides.md`.
@@ -339,6 +340,8 @@ refuses a query with any placeholder left unsubstituted, and dry-runs for cost f
 - `references/traps.md` - the catalogue of expensive mistakes, each with its tell
 - `references/where-the-money-hides.md` - where GCP money actually accumulates, by service
 - `references/monthly-review.md` - Mode A: the recurring loop and its report template
+- `schedule/` - make Mode A recurring: a runner plus launchd/cron/systemd wiring. Pre-pulls
+  the data; the judgement steps stay with you
 - `references/no-export-yet.md` - no export, or a brand-new one: enable it, and what to do meanwhile
 - `scripts/discover.py` - locate the billing export and summarise its shape
 - `scripts/bq.py` - run a query file against the export and print a readable table

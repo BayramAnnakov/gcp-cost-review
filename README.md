@@ -22,6 +22,7 @@ discover.
 | `references/traps.md` | the catalogue of expensive mistakes, each with its tell |
 | `references/where-the-money-hides.md` | where GCP spend actually accumulates, by service |
 | `references/monthly-review.md` | the recurring review loop and its report template |
+| `schedule/` | **run it on a schedule** — a runner, a launchd plist, cron and systemd lines |
 | `references/no-export-yet.md` | **no export yet?** enable it, and what you can measure meanwhile |
 | `scripts/discover.py` | find the billing export and describe its shape |
 | `scripts/bq.py` | run a parameterised query and print a readable table |
@@ -81,6 +82,11 @@ query, prints the estimate, and refuses anything over `--max-gb` (default 20).
 
 Then just ask: *"why did our GCP bill go up last month?"* or *"run the monthly cloud cost
 review"*.
+
+**To make it recurring**, see [`schedule/`](schedule/) — it pre-pulls the data on the 5th (the
+month that just closed) and the 20th (a mid-month watch for new SKUs and reverted savings), so
+the review starts with numbers. Run it by hand once before you schedule it; the README there
+explains why that is not optional.
 
 **Keep your outputs out of git.** The export table name contains your billing account id
 and the reports contain real spend. `.gitignore` already excludes `cost-reviews/` and

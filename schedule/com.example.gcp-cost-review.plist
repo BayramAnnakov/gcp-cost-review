@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS. Fires on the 5th (review the month that just closed) and the 20th
+  (mid-month watch). Install:
+
+    cp schedule/com.example.gcp-cost-review.plist ~/Library/LaunchAgents/
+    # edit the path below to where you cloned the repo
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.example.gcp-cost-review.plist
+    launchctl kickstart -k gui/$(id -u)/com.example.gcp-cost-review   # RUN IT ONCE NOW
+
+  That last line is not optional. A scheduled job you have never executed is a job
+  you are hoping works - and the usual failure is silent.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.example.gcp-cost-review</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/CHANGEME/gcp-cost-review/schedule/cost-review.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Day</key><integer>5</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Day</key><integer>20</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>/tmp/gcp-cost-review.log</string>
+  <key>StandardErrorPath</key><string>/tmp/gcp-cost-review.err</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>
