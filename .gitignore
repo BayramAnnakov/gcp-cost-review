@@ -7,3 +7,4 @@ cost-reviews/
 calibration.local.md
 *.costreview.md
 *.local.env
+.venv/

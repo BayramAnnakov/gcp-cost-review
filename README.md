@@ -29,10 +29,22 @@ discover.
 
 ## Install
 
+**Prerequisites**, neither of which the clone gives you — checked in a clean container, where
+all three of `pip`, `pip3` and `python3 -m pip` were absent and so was `gcloud`:
+
+- **Python 3.9+ with pip.** If `pip` is missing: `python3 -m ensurepip --upgrade`, or install
+  your distro's `python3-pip` and `python3-venv` packages.
+- **The Google Cloud CLI** (`gcloud`), which is a separate install — it is what provides the
+  credentials the queries run under.
+
 ```bash
 git clone https://github.com/BayramAnnakov/gcp-cost-review.git
 ln -s "$PWD/gcp-cost-review" ~/.claude/skills/gcp-cost-review
-pip install google-cloud-bigquery
+
+cd gcp-cost-review
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+
 gcloud auth application-default login
 ```
 

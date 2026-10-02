@@ -17,7 +17,19 @@ try:
     import google.auth
     from google.cloud import bigquery
 except ImportError:
-    sys.exit("Install deps first:  pip install google-cloud-bigquery")
+    sys.exit(
+        "Missing dependency: google-cloud-bigquery.\n"
+        "\n"
+        "  python3 -m venv .venv && . .venv/bin/activate\n"
+        "  pip install -r requirements.txt\n"
+        "\n"
+        "If pip itself is missing (common on slim Linux images):\n"
+        "  python3 -m ensurepip --upgrade\n"
+        "  # or install your distro's python3-pip and python3-venv packages\n"
+        "\n"
+        "Credentials are separate, and need the Google Cloud CLI:\n"
+        "  gcloud auth application-default login"
+    )
 
 EXPORT_PREFIXES = (
     "gcp_billing_export_v1_",            # standard
