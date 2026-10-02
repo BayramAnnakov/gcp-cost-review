@@ -33,8 +33,8 @@ WITH cal AS (
     AND DATE(usage_start_time, 'America/Los_Angeles') BETWEEN '<START>' AND '<END>'
 )
 SELECT FORMAT_DATE('%m-%d %a', cal.d) AS day,
-       ROUND(SUM(IF(r.sku LIKE '<CONTROL_SKU_LIKE>', r.cost, 0)), 3) AS control_gross,
-       ROUND(SUM(r.cost), 2) AS gross_total,
+       ROUND(COALESCE(SUM(IF(r.sku LIKE '<CONTROL_SKU_LIKE>', r.cost, 0)), 0), 3) AS control_gross,
+       ROUND(COALESCE(SUM(r.cost), 0), 2) AS gross_total,
        COUNT(r.pt) AS row_count
 FROM cal LEFT JOIN r ON r.pt = cal.d
 GROUP BY cal.d ORDER BY cal.d

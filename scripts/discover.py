@@ -72,7 +72,7 @@ def main():
             client = bigquery.Client(project=project, credentials=creds)
             datasets = list(client.list_datasets())
         except Exception as e:
-            denied.append((project, "<list datasets>", type(e).__name__))
+            denied.append((project, "<list datasets>", f"{type(e).__name__}: {e}"))
             continue
 
         for ds in datasets:
@@ -80,7 +80,7 @@ def main():
             try:
                 tables = list(client.list_tables(ds.reference))
             except Exception as e:
-                denied.append((project, ds.dataset_id, type(e).__name__))
+                denied.append((project, ds.dataset_id, f"{type(e).__name__}: {e}"))
                 continue
 
             for tbl in tables:
@@ -90,9 +90,17 @@ def main():
                 kind = ("DETAILED (per-resource)"
                         if tbl.table_id.startswith("gcp_billing_export_resource_v1_")
                         else "STANDARD")
-                meta = client.get_table(ref)
-                line = (f"  {kind}\n    table : {ref}\n"
-                        f"    rows  : {meta.num_rows:,}   size: {meta.num_bytes/1e9:.2f} GB")
+                # Listing permission does not imply metadata-read permission, and one
+                # inaccessible table must not abort the search before the next project.
+                try:
+                    meta = client.get_table(ref)
+                    line = (f"  {kind}\n    table : {ref}\n"
+                            f"    rows  : {meta.num_rows:,}   size: {meta.num_bytes/1e9:.2f} GB")
+                except Exception as e:
+                    denied.append((project, f"{ds.dataset_id}.{tbl.table_id}", f"{type(e).__name__}: {e}"))
+                    print(f"  {kind}\n    table : {ref}\n    (metadata unreadable)")
+                    found.append(ref)
+                    continue
                 if args.span:
                     try:
                         cfg = bigquery.QueryJobConfig(

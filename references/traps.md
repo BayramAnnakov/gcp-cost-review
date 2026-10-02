@@ -104,8 +104,8 @@ anything scripted, and never let a pipeline be the first place a command runs.
 you compared the credit against only the *credited* rows' cost. A SKU with one credited
 $5 row and one uncredited $95 row reads as 100% discounted while costing $95 net.
 **Tell:** a SKU you know you pay for shows ~100% offset.
-**Paid for:** a cluster-fee SKU read as almost fully covered by a free tier. Corrected, it
-was 37% offset and the rest was a real bill.
+**Paid for:** a cluster-fee SKU read as almost fully covered by a free tier. Corrected, only
+about a third of it was offset and the rest was a real bill.
 **Rule:** aggregate the full total first, and pull the nested values per row with a
 scalar subquery (`(SELECT SUM(c.amount) FROM UNNEST(credits) c)`), which keeps rows whose
 array is empty. The same trap applies to `labels` and `system_labels`.
@@ -151,9 +151,10 @@ SKU has no credit, so removing it saves the full amount.
 **Actually:** both can be wrong, because a credit is a billing artifact and removal is an
 economic question.
 - a 100% discount may be a **time-limited promotion**. "Net is $0" can mean "not yet".
-- a **committed-use discount inverts the sign**: with a spend-based commitment, reducing
-  usage can *raise* the net bill, because the commitment fee stays while its utilisation
-  offset shrinks.
+- a **committed-use discount can make the saving evaporate**: the commitment is payable
+  regardless, so cutting covered usage drops the usage charge and the offset together and the
+  total barely moves. The fee line's net goes *up*, which looks alarming and is not itself a
+  cost increase.
 - allowances shared across projects mean a saving in one project is absorbed by another.
 **Tell:** the credit's `name` mentions a promotion, trial or commitment; or the account
 has committed-use discounts at all.

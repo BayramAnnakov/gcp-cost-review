@@ -10,7 +10,11 @@
 -- Reading `pct_of_gross_offset`:
 --   ~100  the credit tracks the charge -> net ~ $0. There is NO saving in removing it.
 --   0<x<100, and the credit stops at a round number -> a capped POT. Judge on GROSS.
---   0     no credit. Gross = net.
+--   0     no credit at all. Gross = net. (Uncredited SKUs ARE listed - that is the point.)
+--
+-- ⚠ The percentage lumps EVERY credit type on that SKU together and describes only the window
+-- you selected. It is not a per-type discount rate and not a marginal saving. A capped
+-- allowance can also read 100% inside a window it happens to cover.
 --
 -- ⚠ This classifies ARITHMETIC, not economics. A credit that looks proportional may be a
 -- time-limited promotion that expires, and a committed-use discount can make REDUCING
@@ -35,5 +39,5 @@ SELECT svc, sku,
        SUBSTR(STRING_AGG(DISTINCT cred_names, ' | '), 1, 90) AS credit_names
 FROM r
 GROUP BY svc, sku
-HAVING credits <> 0 AND gross_all_rows >= <MIN_GROSS>
+HAVING gross_all_rows >= <MIN_GROSS>   -- uncredited SKUs included on purpose: 0% is a result
 ORDER BY gross_all_rows DESC

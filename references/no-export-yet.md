@@ -24,6 +24,29 @@ Two decisions matter and both are easy to get wrong:
 
 Backfill can take up to ~5 days to appear. Set it up, then carry on with the rest of this file.
 
+**There is no CLI for this.** `gcloud billing` has no export subcommand — checked, not assumed.
+So if you have an agent with browser control, enabling the export is a legitimate and
+well-scoped use of it: a one-time, console-only action where a human is sitting there to
+approve each step. Have it drive the console with you watching, and make it stop at the
+dataset-location dropdown so you consciously choose US or EU multi-region.
+
+**Do not extend that to reading the numbers.** It is tempting — the console has all the data —
+but scripted clicking is the wrong instrument for a measurement:
+
+- **the console's own "Download CSV" is strictly better.** One human click gives you a file you
+  can analyse, re-analyse and hand to someone else. A click path encoded in a skill rots the
+  next time the UI moves, and it rots *silently* — it clicks something adjacent and returns a
+  confident wrong number.
+- **a figure read off a rendered page is not reproducible**, which is the exact property this
+  whole method exists to provide. If you do obtain a number that way, label it as unreproducible
+  in the report.
+- **absence of evidence is especially unsafe here.** Browser tooling commonly redacts tool output
+  containing query strings or cookies, and billing console URLs are query-string heavy — so "the
+  automation didn't see it" can simply mean the output was filtered. Compute what you need in the
+  page and return derived values (counts, booleans, a total), not screenshots of tables.
+
+So: **browser for the one-time setup, CSV for the data.**
+
 ⚠️ Note who can do this: it needs Billing Account Administrator, which is frequently *not* the
 person doing the cost review. If that is you, the honest move is to raise a ticket today rather
 than discover the blocker in three weeks.

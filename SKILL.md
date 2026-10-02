@@ -81,13 +81,21 @@ late in an engagement looks like a technical problem and is actually a schedulin
 > via the console, the Recommender API and a resource-level sweep, and — importantly —
 > which conclusions you must not claim until the export exists.
 
-**0.1 Find the billing export.** Cost data lives in a BigQuery table the user must
-already have enabled; there is no API that reconstructs it. Run
-`scripts/discover.py` - it lists candidate datasets and tables and prints the table id,
-its date range, and whether detailed (per-resource) export is on. If nothing is found,
-say so plainly: without the export you can read totals in the console but you cannot do
-attribution, and enabling it only starts collecting *from now*, so the answer to
-"why did last month change" may simply not exist yet.
+**0.1 Find the billing export.** Cost data lives in a BigQuery table the user must already
+have enabled; there is no API that reconstructs it. Run `scripts/discover.py` — it lists
+candidate datasets and tables (free metadata only) and prints the table id and size.
+
+If nothing is found, say which of three things it is rather than guessing: the **wrong
+project** (the export usually lives in a dedicated billing project, not your ADC default),
+**missing permission**, or **genuinely not enabled**. The script's output distinguishes them.
+
+Two facts to get right when it is not enabled, because both cut the other way from the
+obvious assumption: a **first** export — standard or detailed — into a **US or EU
+multi-region** dataset backfills from the start of the previous month, so a brand-new export
+is not necessarily empty of history. And the Cloud Console billing reports **do** break down
+by service, SKU, project and label, so "no export" is not "no attribution" — it is "no SQL,
+no arbitrary windows, no per-row credit detail, and nothing reproducible". Point the user at
+`references/no-export-yet.md` and carry on.
 
 **0.2 Match the console.** Before trusting any query, reproduce a number the user can
 see in the Cloud Console billing report. The conventions that make them agree:
@@ -183,9 +191,11 @@ opportunity is zero no matter how large the gross looks (trap A2).
 confident estimates go wrong:
 - a credit that looks proportional may be a **time-limited promotion**. When it expires
   the charge appears in full, so "net is $0" can mean "not yet".
-- **committed-use discounts invert the logic**: under a spend-based commitment, reducing
-  usage can *raise* your net bill, because the commitment fee stays and its utilisation
-  offset shrinks. Check for commitments before recommending any reduction.
+- **committed-use discounts can make a cut worth nothing**: the commitment is payable whether
+  you use it or not, so cutting covered usage reduces the usage charge and the offset together
+  and the account total barely moves. You will see the *fee* line's net rise — that is the
+  offset shrinking, not a cost increase. Check for commitments before promising a saving on
+  anything they cover.
 - allowances shared across projects mean a saving in one project can be absorbed by
   another rather than banked.
 

@@ -116,11 +116,12 @@ zero, while zero dollars across zero rows is missing data wearing the same costu
 
 ## What this skill does not do
 
-- It does not enable the billing export for you, and the export only collects forward (bar
-  one previous-month backfill if you pick a US/EU multi-region dataset). If it was turned on
-  last week, "why did last quarter change" may be unanswerable — the skill says so rather
-  than substituting a worse instrument. **If you have no export at all, start at
-  `references/no-export-yet.md`** — there is a real degraded path.
+- It does not enable the billing export for you. The export collects forward from when it is
+  switched on, with one exception: a first export into a US/EU multi-region dataset backfills
+  from the start of the previous month. So "why did last quarter change" may be unanswerable
+  — the skill says so rather than substituting a worse instrument. **No export at all? Start
+  at `references/no-export-yet.md`** — the console does attribute by service, SKU, project and
+  label, so there is a real degraded path.
 - It does not make changes to your infrastructure. It reads, prices, and tells you what
   to verify.
 - It is GCP-specific. The method generalises; the SQL does not.

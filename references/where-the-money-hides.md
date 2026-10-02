@@ -26,15 +26,17 @@ starts and the hours somebody forgets to turn it off.
 
 **⚠ On Kubernetes, know which billing model you are on before pricing anything.** They
 behave oppositely:
-- **Autopilot** bills *pod resource requests*. Scaling a workload to zero removes the
-  charge directly, so the saving is real and immediate.
-- **Standard** bills *nodes*. Deleting pods changes nothing by itself — you keep paying
-  for the VMs until the cluster autoscaler actually removes them, and it will not if the
-  node pool has a non-zero minimum, or if DaemonSets, system pods or an unrelated
-  workload keep the node occupied.
+- **Autopilot** generally bills *pod resource requests*, so scaling a workload to zero removes
+  the charge directly. Not universally: Autopilot pods that select particular hardware are
+  billed on a node basis instead.
+- **Standard** bills *nodes*. Deleting pods changes nothing by itself — you keep paying for the
+  VMs until the cluster autoscaler removes them, and it can only scale down to the pool's
+  minimum. Pods that cannot be rescheduled elsewhere will also hold a node up.
 
-So on Standard, the saving is "can a node be removed", not "can a pod be stopped". Verify
-against the node count after the change, not the pod count.
+The label on the cluster is not the answer: a Standard cluster can host Autopilot workloads,
+so **determine the billing mode of the workload**, not of the cluster. Either way, on a
+node-billed workload the saving is "can a node be removed", not "can a pod be stopped" —
+verify against the node count after the change.
 
 **If you make it on-demand, you need three things or it will cost more than it saves:**
 a one-command way to bring it up, a **lease with an automatic reaper** so a forgotten
@@ -47,16 +49,18 @@ before declaring it usable.
 
 ## 2. Always-on serverless instances
 
-Serverless platforms bill very differently depending on whether CPU is allocated
-continuously or only during requests. A minimum-instance setting, or a
-"CPU always allocated" / "no CPU throttling" flag, converts a pay-per-request service
-into a pay-per-hour one.
+Serverless platforms bill very differently depending on whether CPU is allocated continuously
+or only during requests. The "CPU always allocated" / "no CPU throttling" setting is what
+switches a service to instance-based billing. A minimum-instance setting is a *separate*
+control — it keeps instances warm and they accrue idle charges, but it does not by itself
+change the billing mode.
 
-**Check:** minimum instances *and*, separately, the CPU-allocation setting. They are two
-different things and conflating them produces wrong prices: a request-billed service can
-still have minimum instances and still accrue idle charges, and Cloud Run **jobs** are
-always instance-billed regardless.
-**Price:** the instance-based SKU lines, split by region.
+**Check:** minimum instances *and*, separately, the CPU-allocation / billing setting. They are
+two different things and conflating them produces wrong prices. A **request-billed** service
+can still have minimum instances, and those idle instances still bill — at a lower idle rate,
+on their own SKU. Cloud Run **jobs** are always instance-billed regardless.
+**Price:** the instance-based SKU lines, split by region — **and** the request-billed idle
+lines, which a search for "instance-based" alone will miss.
 
 **Trap 1:** a service that is genuinely never idle saves ~nothing from `min-instances=0`,
 because it would hold the instance anyway. Measure the real gap between requests first.
@@ -154,10 +158,13 @@ scheduler.
 
 ## 10. The model bill, once infrastructure is tidy
 
-⚠ **Only Google's own model APIs (Vertex AI, Gemini API) appear in this export.** Anthropic,
-OpenAI and other vendors bill separately and are invisible here, so a "total AI spend"
-built from the billing export alone will understate it, sometimes to zero. Pull those from
-each vendor's console or your observability layer and say that you combined sources.
+⚠ **Know which side of the line each model bill sits on.** Models you consume *through Google*
+— Vertex AI, the Gemini API, and partner models such as Claude purchased via Vertex — are
+Google-billed and **do** appear in this export under their own SKUs. Models you buy *directly
+from the vendor* do not appear at all. So a "total AI spend" from the export alone can both
+**understate** (missing direct vendor invoices) and, if you then add those invoices without
+checking, **double-count** the partner models already in it. Enumerate the SKUs first, then
+add only what is genuinely absent, and say that you combined sources.
 
 
 In AI-heavy accounts the model API quickly becomes the largest line, and infrastructure
